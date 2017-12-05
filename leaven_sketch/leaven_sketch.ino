@@ -1,7 +1,11 @@
 #include <OneWire.h>
 #include <TM1637Display.h>
 #include <iarduino_Encoder_tmr.h>
+#include <DallasTemperature.h>
 
+//===========================================================================
+// Подключение дисплеев
+//===========================================================================
 const byte DISPLAY_TIME_CLK = 14; 
 const byte DISPLAY_TIME_DIO = 15;
 
@@ -13,7 +17,9 @@ const byte DISPLAY_TARGET_TEMP_DIO = 19;
 
 const byte DISPLAY_BRIGHT = 0x0a;
 
-
+//===========================================================================
+// Подключение энкодеров
+//===========================================================================
 const byte ENCODER_TIME_CLK = 2;
 const byte ENCODER_TIME_DT = 3;
 const byte ENCODER_TIME_SW = 4;
@@ -22,10 +28,25 @@ const byte ENCODER_TEMP_CLK = 5;
 const byte ENCODER_TEMP_DT = 6;
 const byte ENCODER_TEMP_SW = 7;
 
+//===========================================================================
+// Подключение реле
+//===========================================================================
+const byte RELAY_1_PIN = 8;
+const byte RELAY_2_PIN = 9;
+const byte RELAY_3_PIN = 10;
 
-const byte RELAY_1 = 8;
-const byte RELAY_2 = 9;
-const byte RELAY_3 = 10;
+//===========================================================================
+// Подключение температурных датчиков
+//===========================================================================
+const byte ONE_WIRE_BUS = 2;
+//const byte THERMOMETER_MILK_DATA = 2; 
+///const byte THERMOMETER_WATER_DATA = 2;
+OneWire oneWire(ONE_WIRE_BUS);
+
+DeviceAddress milkThermometerAddress = { 0x28, 0xFF, 0xEF, 0x94, 0xA1, 0x16, 0x03, 0xEB }; //адрес датчика 28 FF EF 94 A1 16 3 EB Thermometer
+DeviceAddress waterThermometerAddress = { 0x28, 0xFF, 0x65, 0x3E, 0xA0, 0x16, 0x03, 0x84 }; //28 FF 65 3E A0 16 3 84
+
+DallasTemperature sensors(&oneWire);
 
 
 iarduino_Encoder_tmr timeEncoder(ENCODER_TIME_CLK, ENCODER_TIME_DT);
@@ -35,10 +56,17 @@ TM1637Display timeDisplay(DISPLAY_TIME_CLK, DISPLAY_TIME_DIO);
 TM1637Display curentTempDisplay(DISPLAY_CURRENT_TEMP_CLK, DISPLAY_CURRENT_TEMP_DIO);
 TM1637Display targetTempDisplay(DISPLAY_TARGET_TEMP_CLK, DISPLAY_TARGET_TEMP_DIO);
 
-OneWire  ds(2);
+//OneWire milkThermometer(THERMOMETER_MILK_DATA);
+//OneWire waterThermometer(THERMOMETER_WATER_DATA);
 
-float milkTemperature = 0.0;
-float waterTemperature = 0.0;
+
+
+float milkCurrentTemperature = 0.0;
+float waterCurrentTemperature = 0.0;
+float milkTargetTemperature = 0.0;
+float milkTargetEncoderTemperature = 0.0;
+bool isMilkTargetTempEdit = false;
+unsigned long encodderEditTime = 0;
 
 void initDisplays() 
 {
@@ -62,6 +90,44 @@ void initEncoders()
     pinMode(ENCODER_TEMP_SW, INPUT);
 }
 
+void initSensors() 
+{
+    sensors.begin();
+    sensors.setResolution(milkThermometerAddress, 10);
+    sensors.setResolution(waterThermometerAddress, 10);
+}
+
+void getTemperature() 
+{
+    sensors.requestTemperatures();
+    milkCurrentTemperature = sensors.getTempC(milkThermometerAddress);
+    waterCurrentTemperature = sensors.getTempC(waterThermometerAddress);
+    Serial.print("Milk: ");
+    Serial.print(milkCurrentTemperature);
+    Serial.print("; Water: ");
+    Serial.println(waterCurrentTemperature);
+}
+
+void printInfoOnDisplay()
+{
+    curentTempDisplay.showNumberDec((int)milkCurrentTemperature, false, 2, 0);
+    curentTempDisplay.showNumberDec((int)waterCurrentTemperature, false, 2, 2);
+}
+
+void targetTemperatureEncoderRead() 
+{
+    int i = tempEncoder.read();
+    if(i != 0)
+    {
+        encodderEditTime = millis();
+        isMilkTargetTempEdit = true;
+    }
+    else 
+    {
+        
+    }
+}
+
 void setup()
 {
     Serial.begin(9600);
@@ -70,7 +136,9 @@ void setup()
 }
 
 void loop(){
-    
+    getTemperature();
+    printInfoOnDisplay();
+    delay(1000);
 }
 
 //long currentValue = 0;
