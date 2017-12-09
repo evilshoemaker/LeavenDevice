@@ -1,7 +1,6 @@
 #include <OneWire.h>
 #include <TM1637Display.h>
 #include <iarduino_Encoder_tmr.h>
-#include <DallasTemperature.h>
 
 //===========================================================================
 // Подключение дисплеев
@@ -38,15 +37,13 @@ const byte RELAY_3_PIN = 10;
 //===========================================================================
 // Подключение температурных датчиков
 //===========================================================================
-const byte ONE_WIRE_BUS = 2;
-//const byte THERMOMETER_MILK_DATA = 2; 
-///const byte THERMOMETER_WATER_DATA = 2;
-OneWire oneWire(ONE_WIRE_BUS);
+const byte THERMOMETER_MILK_DATA = 2; 
+const byte THERMOMETER_WATER_DATA = 2;
 
-DeviceAddress milkThermometerAddress = { 0x28, 0xFF, 0xEF, 0x94, 0xA1, 0x16, 0x03, 0xEB }; //адрес датчика 28 FF EF 94 A1 16 3 EB Thermometer
-DeviceAddress waterThermometerAddress = { 0x28, 0xFF, 0x65, 0x3E, 0xA0, 0x16, 0x03, 0x84 }; //28 FF 65 3E A0 16 3 84
-
-DallasTemperature sensors(&oneWire);
+OneWire milkThermometer(THERMOMETER_MILK_DATA);
+OneWire waterThermometer(THERMOMETER_WATER_DATA);
+unsigned long milkThermometerBeginRead = 0;
+unsigned long waterThermometerBeginRead = 0;
 
 
 iarduino_Encoder_tmr timeEncoder(ENCODER_TIME_CLK, ENCODER_TIME_DT);
@@ -55,9 +52,6 @@ iarduino_Encoder_tmr tempEncoder(ENCODER_TEMP_CLK, ENCODER_TEMP_DT);
 TM1637Display timeDisplay(DISPLAY_TIME_CLK, DISPLAY_TIME_DIO);
 TM1637Display curentTempDisplay(DISPLAY_CURRENT_TEMP_CLK, DISPLAY_CURRENT_TEMP_DIO);
 TM1637Display targetTempDisplay(DISPLAY_TARGET_TEMP_CLK, DISPLAY_TARGET_TEMP_DIO);
-
-//OneWire milkThermometer(THERMOMETER_MILK_DATA);
-//OneWire waterThermometer(THERMOMETER_WATER_DATA);
 
 
 
@@ -90,22 +84,82 @@ void initEncoders()
     pinMode(ENCODER_TEMP_SW, INPUT);
 }
 
-void initSensors() 
+void getAllTemperature() 
 {
-    sensors.begin();
-    sensors.setResolution(milkThermometerAddress, 10);
-    sensors.setResolution(waterThermometerAddress, 10);
-}
+    float tMilk = readTemperature(milkThermometer, THERMOMETER_MILK_DATA);
+    float tWater = readTemperature(waterThermometer, THERMOMETER_WATER_DATA);
+    if (tMilk != -1024) 
+    {
+        milkCurrentTemperature = tMilk;
+    }
+    if (tWater != -1024) 
+    {
+        waterCurrentTemperature = tWater;
+    }
 
-void getTemperature() 
-{
-    sensors.requestTemperatures();
-    milkCurrentTemperature = sensors.getTempC(milkThermometerAddress);
-    waterCurrentTemperature = sensors.getTempC(waterThermometerAddress);
     Serial.print("Milk: ");
     Serial.print(milkCurrentTemperature);
     Serial.print("; Water: ");
     Serial.println(waterCurrentTemperature);
+}
+
+float readTemperature(OneWire &ds, int sensor)
+{
+    float celsius = -1024;
+    
+    unsigned long timeDiff = 0;
+    if (sensor == THERMOMETER_MILK_DATA) {
+        timeDiff = millis() - milkThermometerBeginRead;
+    }
+    else if (sensor == THERMOMETER_WATER_DATA) {
+        timeDiff = millis() - waterThermometerBeginRead;
+    }
+
+    if (timeDiff > 1000) 
+    {
+        byte i;
+        byte data[12];
+        byte addr[8];
+        
+        // поиск адреса датчика
+        if ( !ds.search(addr)) {
+            ds.reset_search();
+            delay(250);
+            return celsius;
+        }
+        
+        ds.reset();
+        ds.select(addr); 
+        ds.write(0xBE); // команда на начало чтения измеренной температуры
+    
+        // считываем показания температуры из внутренней памяти датчика
+        for ( i = 0; i < 9; i++) {
+            data[i] = ds.read();
+        }
+    
+        int16_t raw = (data[1] << 8) | data[0];
+        // датчик может быть настроен на разную точность, выясняем её 
+        byte cfg = (data[4] & 0x60);
+        if (cfg == 0x00) raw = raw & ~7; // точность 9-разрядов, 93,75 мс
+        else if (cfg == 0x20) raw = raw & ~3; // точность 10-разрядов, 187,5 мс
+        else if (cfg == 0x40) raw = raw & ~1; // точность 11-разрядов, 375 мс
+    
+        // преобразование показаний датчика в градусы Цельсия 
+        celsius = (float)raw / 16.0;
+
+        ds.reset();
+        ds.select(addr);
+        ds.write(0x44, 1); // команда на измерение температуры
+
+        if (sensor == THERMOMETER_MILK_DATA) {
+            milkThermometerBeginRead = millis();
+        }
+        else if (sensor == THERMOMETER_WATER_DATA) {
+            waterThermometerBeginRead = millis();
+        }
+    }
+
+    return celsius;
 }
 
 void printInfoOnDisplay()
@@ -136,7 +190,7 @@ void setup()
 }
 
 void loop(){
-    getTemperature();
+    getAllTemperature();
     printInfoOnDisplay();
     delay(1000);
 }
