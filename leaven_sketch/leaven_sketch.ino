@@ -203,27 +203,64 @@ void printInfoOnDisplay()
     }
 
     //показываем время
+    printTimeOnDisplay();
+}
+
+void printTimeOnDisplay() 
+{   
     if (!isTimerMinEdit) {
-        timeDisplay.showNumberDec((int)(timerMin % 60), false, 2, 2);
+        int min = timerMin % 60;
+        if ((min / 10) == 0) {
+            timeDisplay.showNumberDec(min, false, 1, 3);
+            timeDisplay.showNumberDec(0, false, 1, 2);
+        }
+        else {
+            timeDisplay.showNumberDec(min, false, 2, 2);
+        }
     }
     else {
         if (isTimerMinShow) {
-            timeDisplay.showNumberDec((int)timerEncoderMin, false, 2, 2);
+            if ((timerEncoderMin / 10) == 0) {
+                timeDisplay.showNumberDec(timerEncoderMin, false, 1, 3);
+                timeDisplay.showNumberDec(0, false, 1, 2);
+            }
+            else {
+                timeDisplay.showNumberDec(timerEncoderMin, false, 2, 2);
+            }
         }
         else {
             uint8_t data[] = { 0x00, 0x00 };
             timeDisplay.setSegments(data, 2, 2);
         }
     }
+    
     if (!isTimerHourEdit) {
-        timeDisplay.showNumberDec((int)(timerMin / 60), false, 2, 0);
+        int hour = timerMin / 60;
+        uint8_t segto = 0x80 | timeDisplay.encodeDigit(hour % 10);
+        
+        if ((hour / 10) == 0) {            
+            timeDisplay.setSegments(&segto, 1, 1);
+            timeDisplay.showNumberDec(0, false, 1, 0);
+        }
+        else {
+            timeDisplay.setSegments(&segto, 1, 1);
+            timeDisplay.showNumberDec(hour / 10, false, 1, 0);
+        }
     }
     else {
         if (isTimerHourShow) {
-            timeDisplay.showNumberDec(timerEncoderHour, false, 2, 0);
+            uint8_t segto = 0x80 | timeDisplay.encodeDigit(timerEncoderHour % 10);
+            if ((timerEncoderHour / 10) == 0) {                
+                timeDisplay.setSegments(&segto, 1, 1);
+                timeDisplay.showNumberDec(0, false, 1, 0);
+            }
+            else {
+                timeDisplay.setSegments(&segto, 1, 1);
+                timeDisplay.showNumberDec(timerEncoderHour / 10, false, 1, 0);
+            }
         }
         else {
-            uint8_t data[] = { 0x00, 0x00 };
+            uint8_t data[] = { 0x00, 0x80 };
             timeDisplay.setSegments(data, 2, 0);
         }
     }
@@ -232,12 +269,12 @@ void printInfoOnDisplay()
 void targetTemperatureEncoderRead() 
 {
     int encoderValue = tempEncoder.read();
-    
-    if(encoderValue != 0)
+
+    if(encoderValue != 0 && isMilkTargetTempEdit)
     {
         milkTargetEncoderEditTime = millis();
         milkTargetTempShowTime = millis();
-        isMilkTargetTempEdit = true;
+        //isMilkTargetTempEdit = true;
         isMilkTargetTempShow = true;
 
         milkTargetEncoderTemperature += encoderValue;
@@ -248,7 +285,7 @@ void targetTemperatureEncoderRead()
             milkTargetEncoderTemperature = 99;
         }
     }
-    else 
+    else
     {
         if (isMilkTargetTempEdit) 
         {
@@ -272,18 +309,21 @@ void targetTemperatureEncoderRead()
             }
         }
     }
+
+    if (encoderTemperatureButton.uniquePress() && !isMilkTargetTempEdit) {
+        milkTargetEncoderEditTime = millis();
+        milkTargetTempShowTime = millis();
+        isMilkTargetTempEdit = true;
+        isMilkTargetTempShow = true;
+    }
 }
 
 void timerEncoderRead() 
 {
     int encoderValue = timeEncoder.read();
 
-    if(encoderValue != 0)
+    if(encoderValue != 0 && (isTimerMinEdit || isTimerHourEdit))
     {
-        if (!isTimerMinEdit && !isTimerHourEdit) {
-            isTimerMinEdit = true;
-        }
-
         if (isTimerMinEdit) 
         {
             timerEncoderEditTime = millis();
@@ -366,6 +406,13 @@ void timerEncoderRead()
                 isTimerHourEdit = false;
             }
         }
+    }
+
+    if (encoderTimeButton.uniquePress() && !isTimerMinEdit && !isTimerHourEdit) {
+        timerEncoderEditTime = millis();
+        timerShowTime = millis();
+        isTimerMinEdit = true;
+        isTimerMinShow = true;
     }
 }
 
